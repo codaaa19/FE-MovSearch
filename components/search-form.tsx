@@ -9,15 +9,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
-import { FilterIcon } from "lucide-react"
+import { FilterIcon, ChevronUp, ChevronDown } from "lucide-react"
 
 export function SearchForm() {
   const router = useRouter()
   const [query, setQuery] = useState("")
   const [isSemanticSearch, setIsSemanticSearch] = useState(false)
+  const [isFilterVisible, setIsFilterVisible] = useState(false)
 
   // Filter states
   const [yearMin, setYearMin] = useState(1900)
@@ -97,105 +97,113 @@ export function SearchForm() {
             <Search className="absolute left-3 top-3 h-6 w-6 text-slate-400" />
           </div>
 
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="h-12 w-12 bg-slate-700 border-slate-600">
-                <FilterIcon className="h-5 w-5 text-slate-300" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent className="bg-slate-800 text-white border-slate-700">
-              <SheetHeader>
-                <SheetTitle className="text-white">Search Filters</SheetTitle>
-                <SheetDescription className="text-slate-300">Refine your movie search results</SheetDescription>
-              </SheetHeader>
+          <Button 
+            type="button"
+            variant="outline" 
+            size="icon" 
+            className="h-12 w-12 bg-slate-700 border-slate-600"
+            onClick={() => setIsFilterVisible(prev => !prev)}
+          >
+            <FilterIcon className="h-5 w-5 text-slate-300" />
+            {isFilterVisible ? (
+              <ChevronUp className="h-3 w-3 text-slate-300 absolute bottom-1 right-1" />
+            ) : (
+              <ChevronDown className="h-3 w-3 text-slate-300 absolute bottom-1 right-1" />
+            )}
+          </Button>
+        </div>
 
-              <div className="mt-6 space-y-6">
-                <div className="space-y-2">
-                  <Label htmlFor="year-range" className="text-slate-300">
-                    Release Year Range
-                  </Label>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-400">{yearMin}</span>
-                    <span className="text-sm text-slate-400">{yearMax}</span>
-                  </div>
-                  <div className="flex gap-4">
-                    <Input
-                      type="number"
-                      min={1900}
-                      max={yearMax}
-                      value={yearMin}
-                      onChange={(e) => setYearMin(Number(e.target.value))}
-                      className="bg-slate-700 border-slate-600"
-                    />
-                    <Input
-                      type="number"
-                      min={yearMin}
-                      max={new Date().getFullYear()}
-                      value={yearMax}
-                      onChange={(e) => setYearMax(Number(e.target.value))}
-                      className="bg-slate-700 border-slate-600"
-                    />
-                  </div>
+        {isFilterVisible && (
+          <div className="mt-4 p-5 rounded-lg bg-slate-800/50 backdrop-blur-sm text-white border border-slate-700">
+            <h3 className="text-lg font-semibold mb-1 text-white">Search Filters</h3>
+            <p className="text-sm text-slate-300 mb-5">Refine your movie search results</p>
+
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="year-range" className="text-slate-300">
+                  Release Year Range
+                </Label>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-slate-400">{yearMin}</span>
+                  <span className="text-sm text-slate-400">{yearMax}</span>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="rating" className="text-slate-300">
-                    Minimum Rating
-                  </Label>
-                  <div className="flex items-center gap-4">
-                    <Slider
-                      id="rating"
-                      min={0}
-                      max={10}
-                      step={0.1}
-                      value={[ratingMin]}
-                      onValueChange={(value) => setRatingMin(value[0])}
-                      className="flex-1"
-                    />
-                    <span className="min-w-12 text-center text-slate-300">{ratingMin.toFixed(1)}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="size" className="text-slate-300">
-                    Results Per Page
-                  </Label>
-                  <Select value={size.toString()} onValueChange={(value) => setSize(Number(value))}>
-                    <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                      <SelectValue placeholder="Select size" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-700 border-slate-600 text-white">
-                      <SelectItem value="5">5</SelectItem>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="20">20</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-slate-300">Genres</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {genres.map((genre) => (
-                      <div key={genre} className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          id={`genre-${genre}`}
-                          checked={selectedGenres.includes(genre)}
-                          onChange={() => toggleGenre(genre)}
-                          className="rounded text-rose-500 bg-slate-700 border-slate-600"
-                        />
-                        <Label htmlFor={`genre-${genre}`} className="text-sm text-slate-300">
-                          {genre}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
+                <div className="flex gap-4">
+                  <Input
+                    type="number"
+                    min={1900}
+                    max={yearMax}
+                    value={yearMin}
+                    onChange={(e) => setYearMin(Number(e.target.value))}
+                    className="bg-slate-700 border-slate-600"
+                  />
+                  <Input
+                    type="number"
+                    min={yearMin}
+                    max={new Date().getFullYear()}
+                    value={yearMax}
+                    onChange={(e) => setYearMax(Number(e.target.value))}
+                    className="bg-slate-700 border-slate-600"
+                  />
                 </div>
               </div>
-            </SheetContent>
-          </Sheet>
-        </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="rating" className="text-slate-300">
+                  Minimum Rating
+                </Label>
+                <div className="flex items-center gap-4">
+                  <Slider
+                    id="rating"
+                    min={0}
+                    max={10}
+                    step={0.1}
+                    value={[ratingMin]}
+                    onValueChange={(value) => setRatingMin(value[0])}
+                    className="flex-1"
+                  />
+                  <span className="min-w-12 text-center text-slate-300">{ratingMin.toFixed(1)}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="size" className="text-slate-300">
+                  Results Per Page
+                </Label>
+                <Select value={size.toString()} onValueChange={(value) => setSize(Number(value))}>
+                  <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                    <SelectValue placeholder="Select size" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-700 border-slate-600 text-white">
+                    <SelectItem value="5">5</SelectItem>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-slate-300">Genres</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {genres.map((genre) => (
+                    <div key={genre} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id={`genre-${genre}`}
+                        checked={selectedGenres.includes(genre)}
+                        onChange={() => toggleGenre(genre)}
+                        className="rounded text-rose-500 bg-slate-700 border-slate-600"
+                      />
+                      <Label htmlFor={`genre-${genre}`} className="text-sm text-slate-300">
+                        {genre}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">

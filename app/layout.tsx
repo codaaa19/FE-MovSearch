@@ -1,26 +1,23 @@
-import type React from "react"
-import "./globals.css"
-import type { Metadata } from "next"
-import { Inter } from "next/font/google"
-import { ThemeProvider } from "@/components/theme-provider"
-import { Footer } from "@/components/footer"
+import type { Metadata } from 'next'
+import { Manrope } from 'next/font/google'
+import './globals.css'
 
-const inter = Inter({ subsets: ["latin"] })
+const manrope = Manrope({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: "MovSearch - Find Your Perfect Movie",
-  description: "Search for movies using keywords or semantic search",
+  title: 'v0 App',
+  description: 'Created with v0',
+  generator: 'v0.dev',
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-slate-900 text-white min-h-screen flex flex-col`}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-          <div className="flex-1">{children}</div>
-          <Footer />
-        </ThemeProvider>
-      </body>
+    <html lang="en" suppressHydrationWarning={true}>
+      <body className={manrope.className}>{children}</body>
     </html>
   )
 }

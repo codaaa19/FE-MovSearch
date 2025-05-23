@@ -10,6 +10,28 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+
+  .main-background-wrapper {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .main-background-wrapper::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 70%;
+    height: 100%;
+    background-image: url('/background-movies.jpg');
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-position: center right;
+    opacity: 0.075;
+    mask-image: linear-gradient(to right, transparent 5%, black 50%, black 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 5%, black 50%, black 100%);
+    pointer-events: none;
+  }
 }
 
 @layer base {
