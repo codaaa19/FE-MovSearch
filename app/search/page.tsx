@@ -54,7 +54,15 @@ export default function SearchPage() {
             <p className="text-xl text-slate-300">Loading movies...</p>
           </div>
         ) : (
-          <MovieGrid movies={movies} showScore={showScore} />
+          <>
+            <div className="mb-8 p-4 bg-slate-800 rounded-lg">
+              <h2 className="text-xl font-semibold mb-2 text-slate-100">Ringkasan AI</h2>
+              <p className="text-slate-300">
+                [Placeholder untuk ringkasan yang dihasilkan AI tentang hasil pencarian ini. Fitur ini akan segera hadir!]
+              </p>
+            </div>
+            <MovieGrid movies={movies} showScore={showScore} />
+          </>
         )}
       </main>
     </div>
