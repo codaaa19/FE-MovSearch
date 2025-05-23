@@ -114,7 +114,7 @@ export function SearchForm() {
         </div>
 
         {isFilterVisible && (
-          <div className="mt-4 p-5 rounded-lg bg-slate-800 text-white border border-slate-700">
+          <div className="mt-4 p-5 rounded-lg bg-slate-800/50 backdrop-blur-sm text-white border border-slate-700">
             <h3 className="text-lg font-semibold mb-1 text-white">Search Filters</h3>
             <p className="text-sm text-slate-300 mb-5">Refine your movie search results</p>
 
