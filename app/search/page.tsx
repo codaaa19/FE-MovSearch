@@ -58,7 +58,7 @@ export default function SearchPage() {
             <div className="mb-8 p-4 bg-slate-800 rounded-lg">
               <h2 className="text-xl font-semibold mb-2 text-slate-100">Ringkasan AI</h2>
               <p className="text-slate-300">
-                [Placeholder untuk ringkasan yang dihasilkan AI tentang hasil pencarian ini. Fitur ini akan segera hadir!]
+                [Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean commodo ligula eget dolor. Aenean massa. Cum sociis natoque penatibus et magnis dis parturient montes, nascetur ridiculus mus. Donec quam felis, ultricies nec, pellentesque eu, pretium.]
               </p>
             </div>
             <MovieGrid movies={movies} showScore={showScore} />

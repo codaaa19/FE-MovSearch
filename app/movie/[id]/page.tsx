@@ -3,6 +3,7 @@ import Link from "next/link"
 import { ArrowLeft, Clock, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getMovieById } from "@/lib/search"
+import { MovieCast } from "@/components/movie-cast"; // Import komponen baru
 
 export default async function MoviePage({ params }: { params: { id: string } }) {
   const movie = await getMovieById(params.id)
@@ -21,7 +22,7 @@ export default async function MoviePage({ params }: { params: { id: string } }) 
 
   const genres = typeof movie.genres === "string" ? movie.genres.split(", ") : movie.genres || []
 
-  const cast = typeof movie.cast === "string" ? movie.cast.split(", ").slice(0, 10) : movie.cast?.slice(0, 10) || []
+  const cast = movie.cast // Mengambil semua data cast
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
@@ -96,23 +97,8 @@ export default async function MoviePage({ params }: { params: { id: string } }) 
               </div>
             )}
 
-            {cast.length > 0 && (
-              <div className="mt-6">
-                <h2 className="text-xl font-semibold">Cast</h2>
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {cast.map((actor, index) => (
-                    <span key={index} className="text-sm bg-slate-800 text-slate-300 px-3 py-1 rounded-full">
-                      {actor}
-                    </span>
-                  ))}
-                  {typeof movie.cast === "string" && movie.cast.split(", ").length > 10 && (
-                    <span className="text-sm bg-slate-800 text-slate-300 px-3 py-1 rounded-full">
-                      +{movie.cast.split(", ").length - 10} more
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* Menggunakan komponen MovieCast */}
+            <MovieCast rawCast={cast} />
           </div>
         </div>
       </div>
