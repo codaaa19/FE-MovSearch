@@ -1,5 +1,5 @@
-import type { Movie, SearchParams } from "./types"
-import api from "./api"
+import type { Movie, SearchParams as FrontendSearchParams, SearchFilters as FrontendSearchFilters } from "./types";
+import api, { BackendQueryRequest, BackendKeywordSearchRequest, MovieSummaryRequestData, BackendSearchFilters } from "./api"
 
 // Mock data for demonstration
 const mockMovies: Movie[] = [
@@ -175,43 +175,52 @@ const mockMovies: Movie[] = [
   },
 ]
 
-// Function to simulate keyword search
-export async function searchMovies(params: SearchParams): Promise<Movie[]> {
-  const { query, size = 10, filters, type = "hybrid" } = params;
+// Function to search movies (keyword or semantic)
+export async function searchMovies(params: FrontendSearchParams): Promise<Movie[]> {
+  const { query, size = 10, filters, type } = params;
 
   try {
-    if (type === "hybrid") {
-      return await api.hybridSearch({
+    if (type === "semantic") {
+      const backendFilters: BackendSearchFilters = {};
+      if (filters?.year) {
+        backendFilters.year = {};
+        if (filters.year.min && filters.year.min > 0) backendFilters.year.min = filters.year.min;
+        // Ensure year.max is considered if present
+        if (filters.year.max && filters.year.max > 0 && filters.year.max >= (filters.year.min || 0)) {
+            backendFilters.year.max = filters.year.max;
+        }
+      }
+      // Backend expects 'vote_average' for rating filter in semantic search
+      if (filters?.rating?.min !== undefined && filters.rating.min >= 0) { 
+        backendFilters.vote_average = { min: filters.rating.min };
+      }
+      if (filters?.genres && filters.genres.length > 0) {
+        backendFilters.genres = filters.genres;
+      }
+
+      const apiParams: BackendQueryRequest = {
         query,
         size,
-        filters: {
-          year: filters?.year,
-          vote_average: filters?.rating?.min ? { min: filters.rating.min } : undefined,
-          genres: filters?.genres,
-        },
-      });
-    } else if (type === "semantic") {
-      return await api.semanticSearch({
+        filters: Object.keys(backendFilters).length > 0 ? backendFilters : undefined,
+        // min_score: can be added from params if needed for semantic search
+      };
+      return await api.semanticSearch(apiParams);
+    } else { // Keyword search
+      const apiParams: BackendKeywordSearchRequest = {
         query,
         size,
-        filters: {
-          year: filters?.year,
-          vote_average: filters?.rating?.min ? { min: filters.rating.min } : undefined,
-          genres: filters?.genres,
-        },
-      });
-    } else {
-      return await api.keywordSearch(
-        query,
-        size,
-        filters?.year?.min,
-        filters?.year?.max,
-        filters?.rating?.min,
-        filters?.genres
-      );
+        // For keyword search, year_min, year_max, rating_min are top-level in the request body
+        year_min: (filters?.year?.min && filters.year.min > 1900) ? filters.year.min : undefined,
+        year_max: (filters?.year?.max && filters.year.max < new Date().getFullYear() + 1 ) ? filters.year.max : undefined,
+        rating_min: (filters?.rating?.min !== undefined && filters.rating.min >= 0) ? filters.rating.min : undefined,
+        genres: (filters?.genres && filters.genres.length > 0) ? filters.genres.join(',') : undefined,
+      };
+      return await api.keywordSearch(apiParams);
     }
   } catch (error) {
     console.error("Error searching movies:", error);
+    // It might be better to throw the error or return a specific error object
+    // instead of an empty array to allow the caller to handle it more gracefully.
     return [];
   }
 }
@@ -221,7 +230,20 @@ export async function getMovieById(id: string): Promise<Movie | null> {
   try {
     return await api.getMovie(id);
   } catch (error) {
-    console.error("Error getting movie:", error);
+    console.error(`Error getting movie with ID ${id}:`, error);
     return null;
+  }
+}
+
+// Function to get search summary
+export async function getSearchSummary(movies: Movie[], query: string): Promise<string> {
+  try {
+    // Ensure the movies objects passed match the structure expected by the backend
+    // (e.g., if backend expects MoviePydantic, ensure frontend Movie type is compatible)
+    const requestBody: MovieSummaryRequestData = { movies, query }; 
+    return await api.summarizeMovies(requestBody);
+  } catch (error) {
+    console.error("Error getting search summary:", error);
+    return "Maaf, ringkasan AI tidak dapat dibuat saat ini."; // User-friendly error message
   }
 }
