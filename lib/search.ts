@@ -1,4 +1,5 @@
 import type { Movie, SearchParams } from "./types"
+import api from "./api"
 
 // Mock data for demonstration
 const mockMovies: Movie[] = [
@@ -176,145 +177,51 @@ const mockMovies: Movie[] = [
 
 // Function to simulate keyword search
 export async function searchMovies(params: SearchParams): Promise<Movie[]> {
-  // In a real application, this would make an API call to your backend
-  // For demonstration, we'll filter the mock data based on the search parameters
+  const { query, size = 10, filters, type = "hybrid" } = params;
 
-  let results = [...mockMovies]
-
-  // Apply query filter
-  if (params.query) {
-    const query = params.query.toLowerCase()
-
-    if (params.type === "keyword") {
-      // Keyword search - match title, overview, genres, etc.
-      results = results.filter(
-        (movie) =>
-          movie.title.toLowerCase().includes(query) ||
-          movie.overview.toLowerCase().includes(query) ||
-          (typeof movie.genres === "string" && movie.genres.toLowerCase().includes(query)) ||
-          (movie.director && movie.director.toLowerCase().includes(query)) ||
-          (typeof movie.cast === "string" && movie.cast.toLowerCase().includes(query)),
-      )
+  try {
+    if (type === "hybrid") {
+      return await api.hybridSearch({
+        query,
+        size,
+        filters: {
+          year: filters?.year,
+          vote_average: filters?.rating?.min ? { min: filters.rating.min } : undefined,
+          genres: filters?.genres,
+        },
+      });
+    } else if (type === "semantic") {
+      return await api.semanticSearch({
+        query,
+        size,
+        filters: {
+          year: filters?.year,
+          vote_average: filters?.rating?.min ? { min: filters.rating.min } : undefined,
+          genres: filters?.genres,
+        },
+      });
     } else {
-      // Semantic search - simulate by matching related concepts
-      // In a real app, this would use vector embeddings and similarity search
-      const semanticKeywords: Record<string, string[]> = {
-        alien: ["space", "extraterrestrial", "invasion", "planet", "galaxy"],
-        superhero: ["avengers", "marvel", "powers", "save", "hero"],
-        future: ["dystopian", "technology", "advanced", "world", "society"],
-        adventure: ["journey", "quest", "discover", "exploration", "travel"],
-        war: ["battle", "fight", "conflict", "army", "soldier"],
-        love: ["romance", "relationship", "passion", "heart", "emotion"],
-      }
-
-      // Find semantic matches
-      const relevantKeywords: string[] = []
-      Object.entries(semanticKeywords).forEach(([key, values]) => {
-        if (query.includes(key) || values.some((v) => query.includes(v))) {
-          relevantKeywords.push(key, ...values)
-        }
-      })
-
-      if (relevantKeywords.length > 0) {
-        results = results.filter((movie) =>
-          relevantKeywords.some(
-            (keyword) =>
-              movie.title.toLowerCase().includes(keyword) ||
-              movie.overview.toLowerCase().includes(keyword) ||
-              (typeof movie.genres === "string" && movie.genres.toLowerCase().includes(keyword)),
-          ),
-        )
-      } else {
-        // Fallback to keyword search if no semantic matches
-        results = results.filter(
-          (movie) => movie.title.toLowerCase().includes(query) || movie.overview.toLowerCase().includes(query),
-        )
-      }
-    }
-  }
-
-  // Apply filters
-  if (params.filters) {
-    // Filter by genres
-    if (params.filters.genres && params.filters.genres.length > 0) {
-      // Canonical list of genres based on user's data observation
-      const canonicalGenres: string[] = [
-        "Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama",
-        "Family", "Fantasy", "History", "Horror", "Music", "Mystery", "Romance",
-        "Science Fiction", "TV Movie", "Thriller", "War", "Western",
-      ];
-
-      // Filter the incoming filter genres to only include canonical ones that are non-empty
-      const genresToFilterBy = params.filters.genres.filter(
-        (genre) => typeof genre === "string" && genre.trim() !== "" && canonicalGenres.includes(genre.trim())
+      return await api.keywordSearch(
+        query,
+        size,
+        filters?.year?.min,
+        filters?.year?.max,
+        filters?.rating?.min,
+        filters?.genres
       );
-
-      if (genresToFilterBy.length > 0) {
-        results = results.filter((movie) => {
-          // Robustly parse movie genres string into an array of trimmed strings
-          // Handles empty string, null, or undefined safely.
-          const movieGenresArray: string[] =
-            typeof movie.genres === "string" && movie.genres.trim() !== ""
-              ? movie.genres.split(",").map((g) => g.trim())
-              : [];
-
-          if (movieGenresArray.length === 0) {
-            return false; // If movie has no genres, it cannot match any genre filter
-          }
-
-          // Check if any of the movie's genres are in the (now canonical) genresToFilterBy list
-          return movieGenresArray.some((movieGenre) => genresToFilterBy.includes(movieGenre));
-        });
-      }
     }
-
-    // Filter by year
-    if (params.filters.year) {
-      if (params.filters.year.min) {
-        results = results.filter((movie) => {
-          const year = movie.release_date ? new Date(movie.release_date).getFullYear() : 0
-          return year >= (params.filters?.year?.min || 0)
-        })
-      }
-
-      if (params.filters.year.max) {
-        results = results.filter((movie) => {
-          const year = movie.release_date ? new Date(movie.release_date).getFullYear() : 0
-          return year <= (params.filters?.year?.max || 9999)
-        })
-      }
-    }
-
-    // Filter by rating
-    if (params.filters.rating && params.filters.rating.min) {
-      results = results.filter((movie) => {
-        const rating = movie.vote_average || movie.imdb_rating || 0
-        return rating >= (params.filters?.rating?.min || 0)
-      })
-    }
+  } catch (error) {
+    console.error("Error searching movies:", error);
+    return [];
   }
-
-  // Sort by relevance score (in a real app, this would be calculated by the search engine)
-  results.sort((a, b) => (b.score || 0) - (a.score || 0))
-
-  // Apply size limit
-  if (params.size && params.size > 0) {
-    results = results.slice(0, params.size)
-  }
-
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, 500))
-
-  return results
 }
 
 // Function to get a movie by ID
 export async function getMovieById(id: string): Promise<Movie | null> {
-  // In a real application, this would make an API call to your backend
-  const movie = mockMovies.find((movie) => movie.id === id)
-
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, 300))
-
-  return movie || null
+  try {
+    return await api.getMovie(id);
+  } catch (error) {
+    console.error("Error getting movie:", error);
+    return null;
+  }
 }

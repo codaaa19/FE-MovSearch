@@ -219,7 +219,10 @@ export function SearchForm() {
             </Label>
           </div>
 
-          <Button type="submit" className="bg-rose-500 hover:bg-rose-600">
+          <Button
+            className="bg-rose-500 hover:bg-rose-600 text-white px-8 py-4 rounded-lg font-medium transition"
+            type="submit"
+          >
             Search
           </Button>
         </div>
