@@ -7,6 +7,7 @@ import { SearchHeader } from "@/components/search-header"
 import { searchMovies, getSearchSummary } from "@/lib/search"; // Import getSearchSummary
 import type { Movie } from "@/lib/types";
 import { LoadingAnimation } from "@/components/loading-animation"; // Import LoadingAnimation
+import ReactMarkdown from 'react-markdown'; // Import ReactMarkdown
 
 export default function SearchPage() {
   const searchParams = useSearchParams();
@@ -64,7 +65,9 @@ export default function SearchPage() {
 
       if (fetchedMovies.length > 0) {
         // Now fetch summary, summaryLoading is already true
-        const fetchedSummary = await getSearchSummary(fetchedMovies, query);
+        let fetchedSummary = await getSearchSummary(fetchedMovies, query);
+        // Remove potential markdown code block fences and trim whitespace
+        fetchedSummary = fetchedSummary.replace(/^```markdown\\n/, '').replace(/\\n```$/, '').trim();
         setSummary(fetchedSummary);
       } else {
         setSummary("Tidak ada film yang ditemukan untuk diringkas.");
@@ -102,9 +105,11 @@ export default function SearchPage() {
                   */}
                 </div>
               ) : (
-                <p className="text-slate-300 whitespace-pre-wrap">
-                  {summary || (movies.length > 0 ? "Ringkasan tidak tersedia." : "Masukkan query untuk melihat ringkasan.")}
-                </p>
+                <div className="prose prose-sm prose-invert max-w-none"> 
+                  <ReactMarkdown>
+                    {summary || (movies.length > 0 ? "Ringkasan tidak tersedia." : "Masukkan query untuk melihat ringkasan.")}
+                  </ReactMarkdown>
+                </div>
               )}
             </div>
             
