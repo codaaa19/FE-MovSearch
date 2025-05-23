@@ -1,9 +1,10 @@
 import Image from "next/image"
-import Link from "next/link"
+import Link from "next/link"; // Pastikan Link diimpor kembali
 import { ArrowLeft, Clock, Star } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { getMovieById } from "@/lib/search"
-import { MovieCast } from "@/components/movie-cast"; // Import komponen baru
+import { MovieCast } from "@/components/movie-cast";
+import { BackButton } from "@/components/back-button";
 
 export default async function MoviePage({ params }: { params: { id: string } }) {
   const movie = await getMovieById(params.id)
@@ -13,7 +14,7 @@ export default async function MoviePage({ params }: { params: { id: string } }) 
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white p-4">
         <h1 className="text-3xl font-bold">Movie not found</h1>
         <p className="text-slate-300 mt-2">The movie you're looking for doesn't exist or has been removed.</p>
-        <Link href="/" className="mt-6">
+        <Link href="/" className="mt-6"> {/* Link ini tetap menggunakan / sebagai href */}
           <Button className="bg-rose-500 hover:bg-rose-600">Back to Home</Button>
         </Link>
       </div>
@@ -22,7 +23,7 @@ export default async function MoviePage({ params }: { params: { id: string } }) 
 
   const genres = typeof movie.genres === "string" ? movie.genres.split(", ") : movie.genres || []
 
-  const cast = movie.cast // Mengambil semua data cast
+  const cast = movie.cast
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
@@ -35,9 +36,7 @@ export default async function MoviePage({ params }: { params: { id: string } }) 
           className="object-cover"
           priority
         />
-        <Link href="/" className="absolute top-4 left-4 z-20 bg-slate-800/80 p-2 rounded-full hover:bg-slate-700">
-          <ArrowLeft className="h-6 w-6" />
-        </Link>
+        <BackButton /> {/* Menggunakan komponen BackButton di sini */}
       </div>
 
       <div className="container mx-auto px-4 py-8 -mt-32 relative z-20">
