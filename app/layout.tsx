@@ -5,9 +5,9 @@ import './globals.css'
 const manrope = Manrope({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
-  generator: 'v0.dev',
+  title: 'MovSearch',
+  description: 'Temukan Film di Ujung Jari Anda',
+  generator: 'MovSearch',
 }
 
 export default function RootLayout({
