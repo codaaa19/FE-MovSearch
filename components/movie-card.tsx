@@ -17,9 +17,10 @@ import {
 
 interface MovieCardProps {
   movie: Movie
+  showScore?: boolean
 }
 
-export function MovieCard({ movie }: MovieCardProps) {
+export function MovieCard({ movie, showScore }: MovieCardProps) {
   const [showInfo, setShowInfo] = useState(false)
 
   const genres = typeof movie.genres === "string" ? movie.genres.split(", ") : movie.genres
@@ -40,6 +41,9 @@ export function MovieCard({ movie }: MovieCardProps) {
         <div className="p-4">
           <h3 className="font-semibold text-lg line-clamp-1">{movie.title}</h3>
           <p className="text-slate-300 text-sm mt-1">{movie.release_date?.substring(0, 4) || "Unknown year"}</p>
+          {showScore && movie.score !== undefined && (
+            <p className="text-xs text-rose-400 mt-1">Score: {movie.score.toFixed(4)}</p>
+          )}
 
           <div className="flex flex-wrap gap-1 mt-2">
             {Array.isArray(genres) &&
