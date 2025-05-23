@@ -237,13 +237,35 @@ export async function searchMovies(params: SearchParams): Promise<Movie[]> {
   if (params.filters) {
     // Filter by genres
     if (params.filters.genres && params.filters.genres.length > 0) {
-      results = results.filter((movie) => {
-        const movieGenres = typeof movie.genres === "string" ? movie.genres.split(", ") : movie.genres || []
+      // Canonical list of genres based on user's data observation
+      const canonicalGenres: string[] = [
+        "Action", "Adventure", "Animation", "Comedy", "Crime", "Documentary", "Drama",
+        "Family", "Fantasy", "History", "Horror", "Music", "Mystery", "Romance",
+        "Science Fiction", "TV Movie", "Thriller", "War", "Western",
+      ];
 
-        return params.filters?.genres?.some((genre) =>
-          typeof movieGenres === "string" ? movieGenres.includes(genre) : movieGenres.some((g) => g.includes(genre)),
-        )
-      })
+      // Filter the incoming filter genres to only include canonical ones that are non-empty
+      const genresToFilterBy = params.filters.genres.filter(
+        (genre) => typeof genre === "string" && genre.trim() !== "" && canonicalGenres.includes(genre.trim())
+      );
+
+      if (genresToFilterBy.length > 0) {
+        results = results.filter((movie) => {
+          // Robustly parse movie genres string into an array of trimmed strings
+          // Handles empty string, null, or undefined safely.
+          const movieGenresArray: string[] =
+            typeof movie.genres === "string" && movie.genres.trim() !== ""
+              ? movie.genres.split(",").map((g) => g.trim())
+              : [];
+
+          if (movieGenresArray.length === 0) {
+            return false; // If movie has no genres, it cannot match any genre filter
+          }
+
+          // Check if any of the movie's genres are in the (now canonical) genresToFilterBy list
+          return movieGenresArray.some((movieGenre) => genresToFilterBy.includes(movieGenre));
+        });
+      }
     }
 
     // Filter by year

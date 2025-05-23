@@ -42,6 +42,7 @@ export function SearchForm() {
     "Mystery",
     "Romance",
     "Science Fiction",
+    "TV Movie", // Added TV Movie here
     "Thriller",
     "War",
     "Western",
