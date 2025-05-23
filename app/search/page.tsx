@@ -1,22 +1,21 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSearchParams } from 'next/navigation';
 import { MovieGrid } from "@/components/movie-grid"
 import { SearchHeader } from "@/components/search-header"
 import { searchMovies } from "@/lib/search"
 import type { Movie } from "@/lib/types"
 
-export default function SearchPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined }
-}) {
-  const query = (searchParams.query as string) || ""
-  const size = Number.parseInt((searchParams.size as string) || "10")
-  const yearMin = Number.parseInt((searchParams.year_min as string) || "0")
-  const yearMax = Number.parseInt((searchParams.year_max as string) || "0")
-  const ratingMin = Number.parseFloat((searchParams.rating_min as string) || "0")
-  const genres = searchParams.genres ? (searchParams.genres as string).split(",") : []
+export default function SearchPage() {
+  const searchParams = useSearchParams();
+  const query = searchParams.get("query") || "";
+  const size = Number.parseInt(searchParams.get("size") || "10");
+  const yearMin = Number.parseInt(searchParams.get("year_min") || "0");
+  const yearMax = Number.parseInt(searchParams.get("year_max") || "0");
+  const ratingMin = Number.parseFloat(searchParams.get("rating_min") || "0");
+  const genresParam = searchParams.get("genres");
+  const genres = genresParam ? genresParam.split(",") : []
   const [showScore, setShowScore] = useState(false)
   const [movies, setMovies] = useState<Movie[]>([])
   const [loading, setLoading] = useState(true)
@@ -39,7 +38,7 @@ export default function SearchPage({
     }
     fetchInitialMovies()
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, size, yearMin, yearMax, ratingMin, searchParams.genres])
+  }, [query, size, yearMin, yearMax, ratingMin, genresParam])
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
