@@ -292,7 +292,7 @@ export default function SemanticSearchPage() {
         resultCount={movies.length}
         showScore={showScore}
         onShowScoreChange={setShowScore}
-        // isSemanticPage={true} // Removed as it's not a prop of SearchHeader
+        isSemanticSearch={true} // Add this prop to indicate semantic search
       />
       <main className="container mx-auto px-4 py-8">
         {loading ? (
