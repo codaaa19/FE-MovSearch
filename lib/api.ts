@@ -54,7 +54,7 @@ const SUMMARY_API_PREFIX = `${API_BASE_URL}/api/v1/search`;
 
 const api = {
   async semanticSearch(params: BackendQueryRequest): Promise<Movie[]> {
-    const response = await axios.post(`${MOVIES_API_PREFIX}/semantic-search`, params);
+    const response = await axios.post(`${MOVIES_API_PREFIX}/hybrid-search`, params);
     return response.data;
   },
 
