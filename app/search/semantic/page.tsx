@@ -37,7 +37,14 @@ export default function SemanticSearchPage() {
 
   // Function to generate a unique key for session storage
   const getCacheKey = () => {
-    const filtersStr = filters ? JSON.stringify(filters) : "";
+    // Create a consistent representation of filters regardless of property order
+    const filtersStr = filters ? JSON.stringify(
+      Object.fromEntries(
+        Object.entries(filters).sort(([a], [b]) => a.localeCompare(b))
+      )
+    ) : "";
+
+    // Create a deterministic hash for long queries to prevent excessively long keys
     const queryPart = query && query.length > 50 ? 
       `q-${query.substring(0, 20)}${query.length}${query.substring(query.length - 10)}` : 
       `q-${query}`;
@@ -58,36 +65,61 @@ export default function SemanticSearchPage() {
 
       // Try to fetch from cache first
       const cacheKey = getCacheKey();
+      let shouldFetchFresh = true;
+      
       try {
         if (typeof window !== 'undefined' && window.sessionStorage) {
           const cachedItem = sessionStorage.getItem(cacheKey);
           if (cachedItem) {
             try {
               const cachedData = JSON.parse(cachedItem);
+              
+              // Validate the structure of cached data
+              if (!cachedData || typeof cachedData !== 'object') {
+                throw new Error("Invalid cache format");
+              }
+              
               const { cachedMovies, cachedSummary, timestamp } = cachedData;
               
               // Check if cache is still valid (less than 1 hour old)
+              const ONE_HOUR = 60 * 60 * 1000; // 1 hour in milliseconds
+              const now = new Date().getTime();
+              const cacheAge = timestamp ? now - timestamp : Infinity;
+              
               const isValid = 
                 Array.isArray(cachedMovies) && 
                 cachedMovies.length > 0 && 
                 typeof cachedSummary === 'string' &&
-                (!timestamp || (new Date().getTime() - timestamp < 60 * 60 * 1000));
+                cacheAge < ONE_HOUR;
+                
+              if (timestamp) {
+                console.log(`Semantic cache age: ${Math.round(cacheAge / 1000)}s / ${Math.round(ONE_HOUR / 1000)}s max`);
+              }
               
               if (isValid) {
                 setMovies(cachedMovies);
                 setSummary(cachedSummary);
                 setLoading(false);
                 setSummaryLoading(false);
+                setExpanded(false); // Reset expanded state to ensure consistent UI
                 console.log(`Cache hit for semantic search: ${cacheKey}`);
+                shouldFetchFresh = false;  // Skip fetch as we have valid cache
                 return;
               } else {
-                console.log("Cache expired, fetching fresh data for semantic search");
+                console.log("Cache expired or invalid, fetching fresh data for semantic search");
                 sessionStorage.removeItem(cacheKey);
               }
             } catch (parseError) {
               console.error("Error parsing cached data for semantic search:", parseError);
-              sessionStorage.removeItem(cacheKey);
+              // Clean up invalid cache entry
+              try {
+                sessionStorage.removeItem(cacheKey);
+              } catch (removeError) {
+                console.error("Failed to remove invalid cache entry:", removeError);
+              }
             }
+          } else {
+            console.log(`No cache found for semantic search: ${cacheKey}`);
           }
         }
       } catch (error) {
@@ -106,85 +138,142 @@ export default function SemanticSearchPage() {
         filters,
         type: "semantic", // This page is for semantic search
       })
+      
+      // Set movies and immediately stop loading to prevent navigation delay
+      // This allows users to interact with movie results and navigate to detail pages
+      // even while the summary is still being generated
       setMovies(fetchedMovies)
-      setLoading(false) // Movies are loaded
-
-      // Start a separate task for summary generation to avoid blocking navigation
-      let finalSummary = "";
-      if (fetchedMovies.length > 0) {
-        try {
-          // Now fetch summary, summaryLoading is already true
-          let fetchedSummary = await getSearchSummary(fetchedMovies, query);
-          
-          // Clean up the summary from markdown artifacts
-          if (fetchedSummary) {
-            // Extract content from all markdown code blocks
-            const codeBlockRegex = /```(?:markdown)?\s*\n?([\s\S]*?)\n?\s*```/gi;
-            const match = codeBlockRegex.exec(fetchedSummary);
+      setLoading(false) // Movies are loaded - IMPORTANT: This enables immediate navigation
+      
+      // Initialize with a temporary message
+      let finalSummary = "Memuat ringkasan...";
+      
+      // Create a true asynchronous function for handling summary
+      const generateSummaryAsync = async () => {
+        if (fetchedMovies.length > 0) {
+          try {
+            // Set an initial message while waiting for the summary
+            setSummary("Ringkasan sedang dihasilkan...");
             
-            if (match && match[1]) {
-              fetchedSummary = match[1].trim();
-            } else {
+            // Now fetch summary asynchronously
+            let fetchedSummary = await getSearchSummary(fetchedMovies, query);
+            
+            // Clean up the summary from markdown artifacts
+            if (fetchedSummary) {
+              // First, try to extract content from markdown code blocks with improved regex
+              // that handles nested code blocks better
+              const codeBlockRegex = /```(?:markdown|md)?\s*\n?([\s\S]*?)\n?\s*```(?!\w)/gi;
+              let extractedContent = '';
+              let match;
+              
+              // Find all code blocks and concatenate their contents
+              while ((match = codeBlockRegex.exec(fetchedSummary)) !== null) {
+                if (match[1] && match[1].trim()) {
+                  extractedContent += match[1].trim() + '\n\n';
+                }
+              }
+              
+              // If we found content inside code blocks, use that
+              if (extractedContent) {
+                fetchedSummary = extractedContent.trim();
+              } else {
+                // If no content was extracted from code blocks, just clean up all code block markers
+                fetchedSummary = fetchedSummary
+                  .replace(/```(?:markdown|md)?\s*\n?/gi, '')
+                  .replace(/\n?\s*```\s*/gi, '')
+                  .trim();
+              }
+              
+              // Additional cleanup for better markdown rendering
               fetchedSummary = fetchedSummary
-                .replace(/```(?:markdown)?\s*\n?/gi, '')
-                .replace(/\n?\s*```\s*/gi, '')
-                .trim();
+                // Remove any potential harmful tags
+                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+                .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+                // Fix escaped characters that might break tables or other markdown elements
+                .replace(/\\[trn]/g, ' ')  
+                .replace(/\\\\/g, '\\')
+                // Ensure tables have proper spacing
+                .replace(/\|\s*\n/g, '|\n')
+                .replace(/\|\s*-\s*\|/g, '| - |');
             }
             
-            fetchedSummary = fetchedSummary
-              .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-              .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+            // Update the state with summary results
+            setSummary(fetchedSummary);
+            finalSummary = fetchedSummary;
+          } catch (error) {
+            console.error("Error fetching semantic search summary:", error);
+            finalSummary = "Maaf, terjadi kesalahan saat membuat ringkasan.";
+            setSummary(finalSummary);
           }
-          
-          setSummary(fetchedSummary);
-          finalSummary = fetchedSummary;
-        } catch (error) {
-          console.error("Error fetching semantic search summary:", error);
-          finalSummary = "Maaf, terjadi kesalahan saat membuat ringkasan.";
+        } else {
+          finalSummary = "Tidak ada film yang ditemukan untuk diringkas.";
           setSummary(finalSummary);
         }
-      } else {
-        finalSummary = "Tidak ada film yang ditemukan untuk diringkas.";
-        setSummary(finalSummary);
-      }
-      setSummaryLoading(false);
-
-      // Store in session storage
-      try {
-        if (typeof window !== 'undefined' && window.sessionStorage) {
-          const dataToStore = { 
-            cachedMovies: fetchedMovies, 
-            cachedSummary: finalSummary,
-            timestamp: new Date().getTime()
-          };
-          const serialized = JSON.stringify(dataToStore);
-          
-          if (serialized.length > 4 * 1024 * 1024) { 
-            // If data is too large, store reduced version
-            const reducedMovies = fetchedMovies.map(movie => ({
-              id: movie.id,
-              title: movie.title,
-              release_date: movie.release_date,
-              poster_path: movie.poster_path,
-              vote_average: movie.vote_average,
-              genres: movie.genres,
-              score: movie.score
-            }));
-            
-            sessionStorage.setItem(cacheKey, JSON.stringify({ 
-              cachedMovies: reducedMovies, 
+        
+        // Mark loading as complete
+        setSummaryLoading(false);
+        
+        // Then update the cache with the final data
+        try {
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            const dataToStore = { 
+              cachedMovies: fetchedMovies, 
               cachedSummary: finalSummary,
-              timestamp: new Date().getTime() 
-            }));
-            console.log(`Stored reduced cache for semantic search: ${cacheKey}`);
-          } else {
-            sessionStorage.setItem(cacheKey, serialized);
-            console.log(`Stored full cache for semantic search: ${cacheKey}`);
+              timestamp: new Date().getTime()
+            };
+            const serialized = JSON.stringify(dataToStore);
+            
+            // Check if data is too large for sessionStorage (typically limited to ~5MB)
+            // We use a 4MB limit to be safe
+            const MAX_STORAGE_SIZE = 4 * 1024 * 1024; // 4MB in bytes
+            
+            if (serialized.length > MAX_STORAGE_SIZE) { 
+              console.warn(`Cache data too large (${Math.round(serialized.length / 1024)}KB), storing reduced version`);
+              // If data is too large, store reduced version with essential data only
+              const reducedMovies = fetchedMovies.map(movie => ({
+                id: movie.id,
+                title: movie.title,
+                release_date: movie.release_date,
+                poster_path: movie.poster_path,
+                vote_average: movie.vote_average,
+                genres: movie.genres,
+                score: movie.score
+              }));
+              
+              const reducedData = {
+                cachedMovies: reducedMovies, 
+                cachedSummary: finalSummary,
+                timestamp: new Date().getTime(),
+                isReduced: true
+              };
+              
+              const reducedSerialized = JSON.stringify(reducedData);
+              
+              // Check if even the reduced version is too large
+              if (reducedSerialized.length <= MAX_STORAGE_SIZE) {
+                sessionStorage.setItem(cacheKey, reducedSerialized);
+                console.log(`Stored reduced cache for semantic search: ${cacheKey} (${Math.round(reducedSerialized.length / 1024)}KB)`);
+              } else {
+                console.error("Even reduced cache is too large for sessionStorage");
+              }
+            } else {
+              sessionStorage.setItem(cacheKey, serialized);
+              console.log(`Stored full cache for semantic search: ${cacheKey} (${Math.round(serialized.length / 1024)}KB)`);
+            }
           }
+        } catch (error) {
+          console.error("Error writing to session storage for semantic search:", error);
         }
-      } catch (error) {
-        console.error("Error writing to session storage for semantic search:", error);
-      }
+      };
+      
+      // Launch the summary generation as a non-blocking operation
+      generateSummaryAsync().catch(error => {
+        console.error("Unhandled error in summary generation:", error);
+        setSummaryLoading(false);
+      });
+
+      // This code is removed as we're now correctly handling cache updates
+      // in the generateSummaryAsync() function above
     }
 
     if (query) {
@@ -229,29 +318,53 @@ export default function SemanticSearchPage() {
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
-                        h1: ({ node, ...props }) => <h1 className="text-2xl font-bold my-2" {...props} />,
-                        h2: ({ node, ...props }) => <h2 className="text-xl font-bold my-2" {...props} />,
-                        h3: ({ node, ...props }) => <h3 className="text-lg font-bold my-1" {...props} />,
-                        ul: ({ node, ...props }) => <ul className="list-disc ml-6 mb-4" {...props} />,
-                        ol: ({ node, ...props }) => <ol className="list-decimal ml-6 mb-4" {...props} />,
-                        li: ({ node, ...props }) => <li className="my-1" {...props} />,
-                        p: ({ node, ...props }) => <p className="mb-2" {...props} />,
-                        table: ({ node, ...props }) => <table className="w-full border-collapse my-4" {...props} />,
-                        thead: ({ node, ...props }) => <thead className="bg-slate-700" {...props} />,
-                        tbody: ({ node, ...props }) => <tbody className="divide-y divide-slate-600" {...props} />,
-                        tr: ({ node, ...props }) => <tr className="border-b border-slate-600" {...props} />,
-                        th: ({ node, ...props }) => <th className="p-2 text-left font-bold" {...props} />,
-                        td: ({ node, ...props }) => <td className="p-2" {...props} />,
-                        pre: ({ node, ...props }) => <pre className="bg-slate-700 p-3 rounded my-3 overflow-x-auto" {...props} />,
-                        code: ({ node, className, ...props }: any) => {
+                        // Headers styling
+                        h1: ({ node, ...props }) => <h1 className="text-2xl font-bold my-3 text-white" {...props} />,
+                        h2: ({ node, ...props }) => <h2 className="text-xl font-bold my-2 text-white" {...props} />,
+                        h3: ({ node, ...props }) => <h3 className="text-lg font-bold my-2 text-white" {...props} />,
+                        h4: ({ node, ...props }) => <h4 className="text-base font-bold my-1 text-white" {...props} />,
+                        
+                        // List styling
+                        ul: ({ node, ...props }) => <ul className="list-disc ml-6 mb-4 pl-2 space-y-1" {...props} />,
+                        ol: ({ node, ...props }) => <ol className="list-decimal ml-6 mb-4 pl-2 space-y-1" {...props} />,
+                        li: ({ node, ...props }) => <li className="my-0.5 text-slate-200" {...props} />,
+                        
+                        // Paragraph styling
+                        p: ({ node, ...props }) => <p className="mb-3 text-slate-200" {...props} />,
+                        
+                        // Enhanced table styling with border and spacing improvements
+                        table: ({ node, ...props }) => <div className="overflow-x-auto my-4"><table className="w-full border-collapse border border-slate-600 rounded" {...props} /></div>,
+                        thead: ({ node, ...props }) => <thead className="bg-slate-700 text-white" {...props} />,
+                        tbody: ({ node, ...props }) => <tbody className="divide-y divide-slate-600 bg-slate-800/50" {...props} />,
+                        tr: ({ node, ...props }) => <tr className="hover:bg-slate-700/60 transition-colors" {...props} />,
+                        th: ({ node, ...props }) => <th className="p-2 text-left font-semibold border-b border-slate-600" {...props} />,
+                        td: ({ node, ...props }) => <td className="p-2 border-r border-slate-700 last:border-r-0" {...props} />,
+                        
+                        // Code styling
+                        pre: ({ node, ...props }) => <pre className="bg-slate-800 p-3 rounded my-3 overflow-x-auto border border-slate-700" {...props} />,
+                        code: ({ node, inline, className, children, ...props }: any) => {
                           const match = /language-(\w+)/.exec(className || '');
-                          return (
+                          return inline ? (
                             <code 
-                              className={match ? `bg-slate-700 px-1 py-0.5 rounded language-${match[1]}` : `bg-slate-700 px-1 py-0.5 rounded`} 
-                              {...props} 
-                            />
-                          )
-                        }
+                              className="bg-slate-800 px-1.5 py-0.5 rounded text-rose-300 text-sm"
+                              {...props}
+                            >
+                              {children}
+                            </code>
+                          ) : (
+                            <code 
+                              className={match ? `block bg-slate-800 px-3 py-2 rounded language-${match[1]}` : `block bg-slate-800 px-3 py-2 rounded`}
+                              {...props}
+                            >
+                              {children}
+                            </code>
+                          );
+                        },
+                        
+                        // Additional element styling
+                        blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-rose-400 pl-4 italic my-3 text-slate-300" {...props} />,
+                        hr: ({ node, ...props }) => <hr className="border-t border-slate-600 my-4" {...props} />,
+                        a: ({ node, ...props }) => <a className="text-rose-400 hover:text-rose-300 underline transition-colors" {...props} />,
                       }}
                     >
                       {summary || (movies.length > 0 ? "Ringkasan tidak tersedia." : "Masukkan query untuk melihat ringkasan.")}
