@@ -39,7 +39,14 @@ export default function SearchPage() {
     const getCacheKey = () => {
       // Ensure genres are sorted for consistent key generation if their order in URL can vary
       const sortedGenres = genresParam ? genresParam.split(",").sort().join(",") : "";
-      return `searchCache-${query}-${size}-${yearMin}-${yearMax}-${ratingMin}-${sortedGenres}`;
+      
+      // Create a compact but unique key
+      // Use a hash function for long queries to reduce key size
+      const queryPart = query.length > 50 ? 
+        `q-${query.substring(0, 20)}${query.length}${query.substring(query.length - 10)}` : 
+        `q-${query}`;
+      
+      return `cache-${queryPart}-s${size}-y${yearMin}-${yearMax}-r${ratingMin}-g${sortedGenres}`;
     };
 
     async function fetchMoviesAndSummary() {
@@ -54,18 +61,44 @@ export default function SearchPage() {
 
       const cacheKey = getCacheKey();
       try {
-        const cachedItem = sessionStorage.getItem(cacheKey);
-        if (cachedItem) {
-          const { cachedMovies, cachedSummary } = JSON.parse(cachedItem);
-          setMovies(cachedMovies);
-          setSummary(cachedSummary);
-          setLoading(false);
-          setSummaryLoading(false);
-          // console.log("Loaded from cache for key:", cacheKey); // Optional: for debugging
-          return;
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+          const cachedItem = sessionStorage.getItem(cacheKey);
+          if (cachedItem) {
+            // Add a try/catch block specifically for JSON parsing
+            try {
+              const cachedData = JSON.parse(cachedItem);
+              const { cachedMovies, cachedSummary, timestamp } = cachedData;
+              
+              // Check if cache is still valid (less than 1 hour old)
+              const isValid = 
+                Array.isArray(cachedMovies) && 
+                cachedMovies.length > 0 && 
+                typeof cachedSummary === 'string' &&
+                (!timestamp || (new Date().getTime() - timestamp < 60 * 60 * 1000)); // 1 hour cache validity
+              
+              if (isValid) {
+                setMovies(cachedMovies);
+                setSummary(cachedSummary);
+                setLoading(false);
+                setSummaryLoading(false);
+                console.log(`Cache hit: ${cacheKey}, age: ${timestamp ? Math.round((new Date().getTime() - timestamp) / 1000) + 's' : 'unknown'}`);
+                return;
+              } else {
+                console.log("Cache expired or invalid, fetching fresh data");
+                // Remove expired cache
+                sessionStorage.removeItem(cacheKey);
+              }
+            } catch (parseError) {
+              console.error("Error parsing cached data:", parseError);
+              // Clear invalid cache entry
+              sessionStorage.removeItem(cacheKey);
+            }
+          } else {
+            console.log(`No cache found for key: ${cacheKey}`);
+          }
         }
       } catch (error) {
-        console.error("Error reading from session storage:", error);
+        console.error("Error accessing session storage:", error);
         // Proceed to fetch if cache is invalid or error occurs
       }
       
@@ -93,31 +126,101 @@ export default function SearchPage() {
       setMovies(fetchedMovies);
       setLoading(false); // Movies are loaded
 
-      let finalSummary;
-      if (fetchedMovies.length > 0) {
-        // Now fetch summary, summaryLoading is already true
-        let fetchedSummary = await getSearchSummary(fetchedMovies, query);
-        // Remove potential markdown code block fences and trim whitespace
-        // Fix: properly remove markdown code fences with proper regex handling for newlines
-        fetchedSummary = fetchedSummary
-          .replace(/^```(markdown)?\s*\n?/, '')  // Remove opening fence with or without 'markdown' specifier
-          .replace(/\n?```\s*$/, '')             // Remove closing fence
-          .trim();                               // Trim whitespace
-        setSummary(fetchedSummary);
-        finalSummary = fetchedSummary;
-      } else {
-        const noMoviesSummary = "Tidak ada film yang ditemukan untuk diringkas.";
-        setSummary(noMoviesSummary);
-        finalSummary = noMoviesSummary;
-      }
-      setSummaryLoading(false); // Summary is loaded or failed
+      // Movies are already loaded, set loading to false immediately to allow navigation
+      setLoading(false); // Movies are loaded immediately - IMPORTANT for navigation
 
-      // Store in session storage
-      try {
-        sessionStorage.setItem(cacheKey, JSON.stringify({ cachedMovies: fetchedMovies, cachedSummary: finalSummary }));
-      } catch (error) {
-        console.error("Error writing to session storage:", error);
-      }
+      // Initialize summary value for cache (we'll update it later asynchronously)
+      let finalSummary = "Memuat ringkasan...";
+      
+      // Function to process the summary without blocking navigation
+      const processSummary = async () => {
+        if (fetchedMovies.length > 0) {
+          try {
+            let fetchedSummary = await getSearchSummary(fetchedMovies, query);
+            
+            // Clean up the summary from markdown artifacts and code blocks
+            if (fetchedSummary) {
+              // Extract content from all markdown code blocks
+              const codeBlockRegex = /```(?:markdown)?\s*\n?([\s\S]*?)\n?\s*```/gi;
+              const match = codeBlockRegex.exec(fetchedSummary);
+              
+              // If we found content inside markdown code blocks, use that content
+              if (match && match[1]) {
+                fetchedSummary = match[1].trim();
+              } else {
+                // Otherwise just remove the triple backticks
+                fetchedSummary = fetchedSummary
+                  .replace(/```(?:markdown)?\s*\n?/gi, '')  // Remove all opening fences
+                  .replace(/\n?\s*```\s*/gi, '')           // Remove all closing fences
+                  .trim();                                 // Trim whitespace
+              }
+                
+              // Handle potential HTML tags that might break rendering
+              fetchedSummary = fetchedSummary
+                .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')  // Remove script tags
+                .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');    // Remove style tags
+            }
+            
+            setSummary(fetchedSummary);
+            finalSummary = fetchedSummary;
+          } catch (error) {
+            console.error("Error fetching or processing summary:", error);
+            const errorMessage = "Maaf, terjadi kesalahan saat membuat ringkasan.";
+            setSummary(errorMessage);
+            finalSummary = errorMessage;
+          }
+        } else {
+          const noMoviesSummary = "Tidak ada film yang ditemukan untuk diringkas.";
+          setSummary(noMoviesSummary);
+          finalSummary = noMoviesSummary;
+        }
+        setSummaryLoading(false); // Summary is loaded or failed
+        
+        // Now that we have the final summary, store it in the cache
+        try {
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            // Check if the data is too large (over 4MB to be safe)
+            const dataToStore = { cachedMovies: fetchedMovies, cachedSummary: finalSummary };
+            const serialized = JSON.stringify(dataToStore);
+            
+            if (serialized.length > 4 * 1024 * 1024) { 
+              // If data is too large, store only essential data
+              console.warn("Cache data too large, storing reduced version");
+              const reducedMovies = fetchedMovies.map(movie => ({
+                id: movie.id,
+                title: movie.title,
+                release_date: movie.release_date,
+                poster_path: movie.poster_path,
+                vote_average: movie.vote_average,
+                genres: movie.genres,
+              }));
+              const reducedData = { 
+                cachedMovies: reducedMovies, 
+                cachedSummary: finalSummary,
+                timestamp: new Date().getTime() // Add timestamp for cache validity checks
+              };
+              
+              const reducedSerialized = JSON.stringify(reducedData);
+              sessionStorage.setItem(cacheKey, reducedSerialized);
+              console.log(`Cache stored (reduced): ${cacheKey}, size: ${Math.round(reducedSerialized.length / 1024)}KB`);
+            } else {
+              // Store the full data if it's within size limits
+              const dataWithTimestamp = { 
+                ...dataToStore,
+                timestamp: new Date().getTime() // Add timestamp for cache validity checks
+              };
+              const serializedWithTimestamp = JSON.stringify(dataWithTimestamp);
+              sessionStorage.setItem(cacheKey, serializedWithTimestamp);
+              console.log(`Cache stored (full): ${cacheKey}, size: ${Math.round(serializedWithTimestamp.length / 1024)}KB`);
+            }
+          }
+        } catch (error) {
+          console.error("Error writing to session storage:", error);
+        }
+      };
+      
+      // Start the summary processing asynchronously - doesn't block navigation
+      processSummary();
     }
     
     fetchMoviesAndSummary();
@@ -143,16 +246,16 @@ export default function SearchPage() {
               {/* Loading state for summary specifically */}
               {summaryLoading ? (
                 <div className="flex flex-col items-center justify-center py-6">
-                  {/* You can use a smaller, inline loading indicator or a simplified version of LoadingAnimation here */}
                   <p className="text-slate-300 text-lg animate-pulse">Membuat ringkasan AI...</p>
-                  {/* Optionally, a smaller spinner:
-                  <div className="w-6 h-6 border-2 border-rose-400 border-t-transparent rounded-full animate-spin"></div> 
-                  */}
+                  <div className="w-6 h-6 border-2 border-rose-400 border-t-transparent rounded-full animate-spin mt-3"></div>
                 </div>
               ) : (
                 <div>
+                  {/* Fix for the content visibility with improved transition and increased max height */}
                   <div 
-                    className={`prose prose-sm prose-invert max-w-none transition-all duration-500 ease-in-out ${!expanded ? "max-h-[200px] overflow-hidden relative" : "max-h-[2000px]"}`}
+                    className={`prose prose-sm prose-invert max-w-none transition-all duration-500 ease-in-out ${
+                      !expanded ? "max-h-[200px] overflow-hidden relative" : ""
+                    }`}
                   > 
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
@@ -164,16 +267,36 @@ export default function SearchPage() {
                         ul: ({ node, ...props }) => <ul className="list-disc ml-6 mb-4" {...props} />,
                         ol: ({ node, ...props }) => <ol className="list-decimal ml-6 mb-4" {...props} />,
                         li: ({ node, ...props }) => <li className="my-1" {...props} />,
-                        p: ({ node, ...props }) => <p className="mb-2" {...props} />
+                        p: ({ node, ...props }) => <p className="mb-2" {...props} />,
+                        // Add proper table styling
+                        table: ({ node, ...props }) => <table className="w-full border-collapse my-4" {...props} />,
+                        thead: ({ node, ...props }) => <thead className="bg-slate-700" {...props} />,
+                        tbody: ({ node, ...props }) => <tbody className="divide-y divide-slate-600" {...props} />,
+                        tr: ({ node, ...props }) => <tr className="border-b border-slate-600" {...props} />,
+                        th: ({ node, ...props }) => <th className="p-2 text-left font-bold" {...props} />,
+                        td: ({ node, ...props }) => <td className="p-2" {...props} />,
+                        // Fix code blocks if any appear in the summary
+                        pre: ({ node, ...props }) => <pre className="bg-slate-700 p-3 rounded my-3 overflow-x-auto" {...props} />,
+                        code: ({ node, className, ...props }: any) => {
+                          const match = /language-(\w+)/.exec(className || '');
+                          return (
+                            <code 
+                              className={match ? `bg-slate-700 px-1 py-0.5 rounded language-${match[1]}` : `bg-slate-700 px-1 py-0.5 rounded`} 
+                              {...props} 
+                            />
+                          )
+                        }
                       }}
                     >
                       {summary || (movies.length > 0 ? "Ringkasan tidak tersedia." : "Masukkan query untuk melihat ringkasan.")}
                     </ReactMarkdown>
+                    {/* Only show gradient overlay when not expanded and content is long enough */}
                     {!expanded && summary && summary.length > 150 && (
                       <div className="absolute bottom-0 left-0 w-full h-20 bg-gradient-to-t from-slate-800 to-transparent"></div>
                     )}
                   </div>
                   
+                  {/* Only show expand/collapse button when summary is long enough */}
                   {summary && summary.length > 150 && (
                     <button 
                       onClick={() => setExpanded(!expanded)} 
